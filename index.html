@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Smush Solver</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Enter today's Smush letters and get the best word to play each turn, picked by beam search.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="#top" aria-label="Smush Solver, back to top">
+      <span class="brand-tiles" aria-hidden="true"><i>S</i><i>M</i><i class="gold">U</i><i>S</i><i>H</i></span>
+      <span class="brand-word">Solver</span>
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#solver">Solver</a>
+      <a href="#guide">Guide</a>
+      <a href="#about">About</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="intro wrap">
+    <h1>What to play next in Smush, and when to stop.</h1>
+    <p class="lede">Enter today's nine letters and the spicy one. Each turn the solver plays out the rest of the game 96 ways with beam search, then tells you the word with the best average final score.</p>
+  </section>
+
+  <section id="solver" class="solver wrap" aria-label="Solver">
+    <div class="board-col">
+      <div class="board-head">
+        <span class="label">Board</span>
+        <span id="board-meta" class="board-meta"></span>
+      </div>
+      <div id="board" class="board" role="group" aria-label="Letter tiles"></div>
+      <dl id="stats" class="stats" hidden>
+        <div><dt>Word points</dt><dd id="st-points">0</dd></div>
+        <div><dt>Words</dt><dd id="st-words">0</dd></div>
+        <div><dt>Ice cold</dt><dd id="st-ice">–</dd></div>
+        <div><dt>If you stop now</dt><dd id="st-total">–</dd></div>
+      </dl>
+      <ul id="board-key" class="board-key" hidden>
+        <li><span class="key-dot" aria-hidden="true"></span>Use left</li>
+        <li><span class="key-dot ring" aria-hidden="true"></span>Spent by the suggested word</li>
+      </ul>
+    </div>
+
+    <div class="turn-col">
+      <form id="setup" class="card setup" novalidate>
+        <div class="field">
+          <div class="field-top">
+            <label for="letters">Nine letters, gold letter first</label>
+            <span id="example-tag" class="tag">Example</span>
+          </div>
+          <input id="letters" name="letters" type="text" inputmode="text" autocomplete="off" autocorrect="off"
+                 autocapitalize="characters" spellcheck="false" maxlength="12" value="EAGHITVWY"
+                 aria-describedby="letters-help">
+          <p id="letters-help" class="help">Typed the gold letter somewhere else? Tap its tile on the board.</p>
+        </div>
+        <fieldset class="field">
+          <legend>Spicy letter right now</legend>
+          <div id="spice-pick" class="chips"></div>
+        </fieldset>
+        <p id="setup-error" class="error" role="alert"></p>
+        <button id="start" class="btn primary" type="submit">Start solving</button>
+        <p class="note">Before you start, turn on <b>No hints (hardcore)</b> in Smush's settings. The <a href="#guide">guide</a> explains why.</p>
+      </form>
+
+      <div id="turn" class="card turn" hidden tabindex="-1" aria-live="polite"></div>
+    </div>
+
+    <section id="log-card" class="log-card" hidden aria-label="Words played">
+      <h2 class="label">Words played</h2>
+      <ol id="log" class="log"></ol>
+    </section>
+  </section>
+
+  <section id="guide" class="guide">
+    <div class="wrap">
+      <header class="section-head">
+        <p class="label">Guide</p>
+        <h2>How to use the solver</h2>
+      </header>
+      <div class="guide-grid">
+        <ol class="steps">
+          <li>
+            <h3>Turn on No hints (hardcore)</h3>
+            <p>In Smush, open the settings and switch on <b>No hints (hardcore)</b>. The solver sometimes tells you to stop early. With this setting on, tapping “I'm done” doesn't count as a hint, so you keep the Unassisted bonus.</p>
+          </li>
+          <li>
+            <h3>Enter the board</h3>
+            <p>Type the nine letters with the gold letter first, like <span class="kbd">EAGHITVWY</span>. If the gold letter ended up somewhere else, tap its tile and it moves to the center.</p>
+          </li>
+          <li>
+            <h3>Pick the spicy letter</h3>
+            <p>Tap the letter that has the chili on it in the game right now, then press <b>Start solving</b>.</p>
+          </li>
+          <li>
+            <h3>Play the word, then report the spice</h3>
+            <p>Enter the suggested word in Smush. The chili jumps to a new letter. Tap that letter here, or press its key, and the solver plans the next word from the new position.</p>
+          </li>
+          <li>
+            <h3>If Smush rejects a word, say so</h3>
+            <p>The solver uses a large Scrabble dictionary, and Smush's own word list is smaller. If the game won't take a word, tap <b>Smush rejected it</b> and you'll get another one.</p>
+          </li>
+          <li>
+            <h3>Stop when the solver says so</h3>
+            <p>When the card says <b>Stop here</b>, tap “I'm done” in Smush. The tally shows the bonuses the solver plays for. The game may add a few extras of its own, like streaks.</p>
+          </li>
+        </ol>
+        <aside class="ref card" aria-labelledby="ref-title">
+          <h3 id="ref-title">Scoring at a glance</h3>
+          <p>The gold letter is free and goes in every word. The other eight letters have 5 uses each.</p>
+          <p class="ref-sub">Each word</p>
+          <p>Scrabble letter values × a multiplier that starts at 1 and adds:</p>
+          <table class="ref-table">
+            <tbody>
+              <tr><th>Each use of the spicy letter</th><td>+1</td></tr>
+              <tr><th>Each letter the word uses up (smush)</th><td>+1</td></tr>
+              <tr><th>Pangram using all nine letters (+4 if it's your first word)</th><td>+2</td></tr>
+            </tbody>
+          </table>
+          <p class="ref-sub">End of game</p>
+          <table class="ref-table">
+            <tbody>
+              <tr><th>Clean plate, every letter used up</th><td>+50</td></tr>
+              <tr><th>Unassisted, no hints</th><td>+25</td></tr>
+              <tr><th>Heavy lifter, 6 words or fewer</th><td>+25</td></tr>
+              <tr><th>Word hoard, 13 words or more</th><td>+25</td></tr>
+              <tr><th>Perfect game, pangram first + clean plate + no hints</th><td>×2</td></tr>
+              <tr class="ice"><th>ICE COLD, 5+ words that never used the spicy letter</th><td>×5</td></tr>
+            </tbody>
+          </table>
+          <p class="ref-foot">ICE COLD is usually the biggest prize, which is why the solver steers around the spicy letter and often stops early.</p>
+        </aside>
+      </div>
+      <p class="tip"><b>Tip:</b> Tapped the wrong spicy letter? <b>Undo</b> steps back one word. Your game is saved in this browser, so you can switch to Smush and come back.</p>
+    </div>
+  </section>
+
+  <section id="about" class="about">
+    <div class="wrap">
+      <header class="section-head">
+        <p class="label">About</p>
+        <h2>How beam search solves Smush</h2>
+      </header>
+      <div class="about-grid">
+        <div class="about-text">
+          <p>Smush is a planning game with luck in it. The letters you spend now decide which words you can play later, and the spicy letter jumps to a random tile after every word. The solver handles both by searching ahead through sampled futures. Every turn it runs four steps:</p>
+          <ol class="process">
+            <li><b>Shortlist.</b> Score every playable word by the final total you'd have if you stopped right after it, counting ICE COLD as if you'll keep it. Keep the best 12.</li>
+            <li><b>Sample the luck.</b> Draw 8 random paths for where the spicy letter jumps next. All 12 words face the same 8 paths, so the comparison is fair.</li>
+            <li><b>Search to the end.</b> For each word and path, run a beam search to the end of the game. It holds 24 partial games, lets each try its 8 best next words, merges games that used the same set of words, and keeps the best 24. At every step it records the final score for stopping there, bonuses included.</li>
+            <li><b>Decide.</b> Average each word's best result over the 8 paths. Suggest the top word, or say Stop if ending the game now scores more.</li>
+          </ol>
+          <p>That's 96 beam searches per turn, run in your browser. When you report the new spicy letter, the solver starts over from the real position.</p>
+        </div>
+        <figure class="beam-fig">
+          <div class="fig-scroll"><svg id="beam-svg" viewBox="0 0 640 250" role="img" aria-labelledby="beam-cap"></svg></div>
+          <figcaption id="beam-cap">A beam search keeps only the most promising partial games at each step and drops the rest. Drawn here with a beam of 3 and 3 branches. The solver uses 24 and 8.</figcaption>
+        </figure>
+      </div>
+      <div class="results">
+        <h3>Why the bonuses matter</h3>
+        <p>Ranking lines by the final score with bonuses, not by word points alone, is what makes this <b>beam+</b> instead of a plain beam search. Average final score over the same 100 random boards:</p>
+        <table class="results-table">
+          <thead><tr><th scope="col">Strategy</th><th scope="col">Average score</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Always play the highest-scoring word</th><td>489</td></tr>
+            <tr><th scope="row">Beam search for word points only</th><td>718</td></tr>
+            <tr class="hl"><th scope="row">Beam+ with bonuses and early stopping (this site)</th><td>1,018</td></tr>
+          </tbody>
+        </table>
+        <p class="fine">The browser version is a direct port of the original Python solver and returns the same values when given the same random draws.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <p>Smush Solver is an unofficial fan tool for <a href="https://hankgreen.com/smush" target="_blank" rel="noopener">Smush</a> by Hank Green.</p>
+    <p>Words come from a 162,231-word Scrabble dictionary.</p>
+  </div>
+</footer>
+
+<script src="words.js"></script>
+<script src="smush.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
