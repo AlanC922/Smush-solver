@@ -22,6 +22,7 @@
   const HEAVY_LIFTER = 25, HEAVY_MAX = 6;
   const WORD_HOARD = 25, HOARD_MIN = 13;
   const PERFECT_MULT = 2, ICE_MULT = 5, ICE_MIN = 5;
+  const NO_ICE = Infinity;   // an iceMin no game reaches: scores without ICE COLD
 
   const CH_SCORE = [1, 3, 3, 2, 1, 4, 2, 4, 1, 8, 5, 1, 3, 1, 1, 3, 10, 1, 1, 1, 1, 4, 4, 8, 4, 10];
   const A = 97;
@@ -217,6 +218,13 @@
     return finalScore(state.score, state.lives, state.nPlayed, state.cold, state.pangramFirst);
   }
 
+  /** What the search maximises: the final total if the game stopped now, with
+   * ICE COLD only when `ice` is on (Pangram mode turns it off). */
+  function objective(state, ice = true) {
+    return finalScore(state.score, state.lives, state.nPlayed, state.cold, state.pangramFirst, 0,
+      ice ? ICE_MIN : NO_ICE);
+  }
+
   /** {key, label, effect} rows for an end-of-game summary. */
   function bonusRows(state) {
     let clean = true;
@@ -250,8 +258,9 @@
 
   /** Final total right after playing w from `node`, as if the game stopped there.
    * Optimistic: ICE COLD counts from the first word, so the search protects the
-   * x5 before the fifth word makes it real (baselines.child_totals). */
-  function childKey(spec, node, w) {
+   * x5 before the fifth word makes it real (baselines.child_totals). Without
+   * `ice` it never counts. */
+  function childKey(spec, node, w, ice = true) {
     const o = w * N_SLOTS, cost = spec.cost, used = spec.usedSlots, lives = node.lives;
     let smushed = 0;
     for (let k = 0, m = spec.nUsed[w]; k < m; k++) {
@@ -266,7 +275,7 @@
     let total = node.score + pts + (clean ? CLEAN_PLATE : 0) + UNASSISTED
       + (n <= HEAVY_MAX ? HEAVY_LIFTER : 0) + (n >= HOARD_MIN ? WORD_HOARD : 0);
     if (clean && (node.pf || (node.n === 0 && pangram))) total *= PERFECT_MULT;
-    if (node.cold && spicy === 0) total *= ICE_MULT;
+    if (ice && node.cold && spicy === 0) total *= ICE_MULT;
     return total;
   }
 
@@ -299,9 +308,10 @@
    * from `start` when future spice draws are us[from], us[from + 1], ...
    * Each depth expands every game's `branch` best words, merges games that
    * reached the same word set, and keeps the `width` best (baselines.beam_total). */
-  function beamTotal(spec, start, us, from, width, branch) {
+  function beamTotal(spec, start, us, from, width, branch, ice = true) {
+    const iceMin = ice ? ICE_MIN : NO_ICE;
     let beam = [start];
-    let best = start.n > 0 ? finalScore(start.score, start.lives, start.n, start.cold, start.pf) : 0;
+    let best = start.n > 0 ? finalScore(start.score, start.lives, start.n, start.cold, start.pf, 0, iceMin) : 0;
     const topW = new Int32Array(branch), topK = new Float64Array(branch);
     for (let t = from; t < us.length; t++) {
       const candP = [], candW = [], candK = [];
@@ -309,7 +319,7 @@
         const node = beam[p], legal = node.legal;
         let cnt = 0;
         for (let i = 0; i < legal.length; i++) {
-          const w = legal[i], key = childKey(spec, node, w);
+          const w = legal[i], key = childKey(spec, node, w, ice);
           if (cnt === branch && key <= topK[cnt - 1]) continue;
           let j = cnt < branch ? cnt++ : cnt - 1;     // insertion into a short sorted list
           while (j > 0 && topK[j - 1] < key) { topK[j] = topK[j - 1]; topW[j] = topW[j - 1]; j--; }
@@ -327,7 +337,7 @@
         seen.add(hash);
         const child = childNode(spec, node, w, u);
         next.push(child);
-        best = Math.max(best, finalScore(child.score, child.lives, child.n, child.cold, child.pf));
+        best = Math.max(best, finalScore(child.score, child.lives, child.n, child.cold, child.pf, 0, iceMin));
         if (next.length === width) break;
       }
       beam = next;
@@ -335,21 +345,21 @@
     return best;
   }
 
-  const DEFAULTS = { topK: 12, samples: 8, width: 24, branch: 8 };
+  const DEFAULTS = { topK: 12, samples: 8, width: 24, branch: 8, ice: true };
 
   /** The beam+ agent's search, one beam search per step so callers can pause between them.
    * Shortlists the topK words by optimistic total, samples `samples` spice futures (the
    * same futures for every word), runs a beam search to the end of the game in each,
    * and returns the word with the best average final total, or STOP when stopping now
-   * beats them all. */
+   * beats them all. With `ice` off, totals leave out ICE COLD (Pangram mode). */
   function* searchSteps(spec, state, rng, params = {}) {
-    const { topK, samples, width, branch, futures: given } = { ...DEFAULTS, ...params };
+    const { topK, samples, width, branch, ice, futures: given } = { ...DEFAULTS, ...params };
     const root = rootNode(spec, state);
-    const stopValue = state.nPlayed > 0 ? stateTotal(state) : -1;
+    const stopValue = state.nPlayed > 0 ? objective(state, ice) : -1;
     if (root.legal.length === 0) return { move: STOP, value: stopValue, stopValue, candidates: [] };
 
     const keys = new Float64Array(spec.n);
-    for (const w of root.legal) keys[w] = childKey(spec, root, w);
+    for (const w of root.legal) keys[w] = childKey(spec, root, w, ice);
     const cand = Array.from(root.legal).sort((a, b) => keys[b] - keys[a] || a - b).slice(0, topK);
 
     const futures = given || Array.from({ length: samples }, () => {
@@ -368,7 +378,7 @@
       for (let f = 0; f < futures.length; f++) {
         const us = futures[f];
         const start = { ...child, spice: nextSpice(child.lives, root.spice, us[0]) };
-        v += beamTotal(spec, start, us, 1, width, branch);
+        v += beamTotal(spec, start, us, 1, width, branch, ice);
         yield { done: i * futures.length + f + 1, total };
       }
       v /= futures.length;
@@ -417,7 +427,7 @@
     N_SLOTS, USES, STOP, MAX_TURNS, DEFAULTS,
     CLEAN_PLATE, UNASSISTED, HEAVY_LIFTER, HEAVY_MAX, WORD_HOARD, HOARD_MIN, PERFECT_MULT, ICE_MULT, ICE_MIN,
     letterMask, wordScore, makeRng, Dictionary, makeSpec, newGame, copyState, legalList, isOver,
-    movePoints, nextSpice, moveBreakdown, step, finalScore, stateTotal, bonusRows,
+    movePoints, nextSpice, moveBreakdown, step, finalScore, stateTotal, objective, bonusRows,
     rootNode, childKey, childNode, beamTotal, searchSteps, suggest, suggestAsync,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

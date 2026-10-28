@@ -1,6 +1,6 @@
-/* Smush Solver page: board setup, the turn-by-turn solver loop (the browser
- * version of `smush_solver.py --interactive --agent beam+`), and the About
- * diagram. The search itself lives in smush.js.
+/* Smush Solver page: board setup, the strategy switch, the turn-by-turn solver
+ * loop (the browser version of `smush_solver.py --interactive --agent beam+`),
+ * and the About diagram. The search itself lives in smush.js.
  *
  * A game is a pure function of (board, spicy letter at the start, actions), so
  * undo and restoring a saved game both just replay the action list. */
@@ -34,6 +34,14 @@
   const setup = { letters: EXAMPLE.letters, spice: EXAMPLE.spice, example: true };
   let game = null;
   let searchId = 0;
+
+  /** Strategy: 'cold' plays for every bonus, where ICE COLD's x5 usually wins;
+   * 'pangram' leaves ICE COLD out, so the search goes for word points, a pangram
+   * first and PERFECT x2. Either can be picked at any point in a game. */
+  const MODES = ['cold', 'pangram'];
+  let mode = 'cold';
+  /** Pangram mode still keeps an ICE COLD that is already locked in. */
+  const iceOn = state => mode === 'cold' || (state.cold && state.nPlayed >= S.ICE_MIN);
 
   // --- setup -------------------------------------------------------------------
 
@@ -111,7 +119,7 @@
     const spec = specFor(letters);
     game = {
       letters, spec, spice0: spec.outer.indexOf(spiceLetter), actions: actions.slice(),
-      cache: [], rng: S.makeRng(0), phase: 'thinking', suggestion: null,
+      cache: { ice: [], plain: [] }, rng: S.makeRng(0), phase: 'thinking', suggestion: null,
     };
     replay();
     save();
@@ -152,7 +160,7 @@
   }
 
   function act(action) {
-    game.cache.length = game.actions.length + 1;
+    game.cache.ice.length = game.cache.plain.length = game.actions.length + 1;
     game.actions.push(action);
     replay();
     save();
@@ -176,6 +184,13 @@
     $('solver').scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
+  function setMode(m) {
+    if (m === mode || !MODES.includes(m)) return;
+    mode = m;
+    save();
+    if (game) think();
+  }
+
   function show(phase, suggestion) {
     game.phase = phase;
     game.suggestion = suggestion || null;
@@ -187,13 +202,14 @@
     const { spec, state } = game;
     if (game.finished) return show('done');
     if (S.isOver(spec, state)) return show('over');
-    const cached = game.cache[game.actions.length];
+    const ice = iceOn(state), cache = ice ? game.cache.ice : game.cache.plain;
+    const cached = cache[game.actions.length];
     if (cached) return show(cached.move === S.STOP ? 'stop' : 'suggest', cached);
 
     show('thinking');
     const started = performance.now();
     await delay(0);
-    const result = await S.suggestAsync(spec, state, game.rng, S.DEFAULTS, {
+    const result = await S.suggestAsync(spec, state, game.rng, { ...S.DEFAULTS, ice }, {
       onProgress: (done, total) => { if (id === searchId) setProgress(done / total); },
       isCancelled: () => id !== searchId,
     });
@@ -202,7 +218,7 @@
     const wait = MIN_THINK_MS - (performance.now() - started);
     if (wait > 0) await delay(wait);
     if (id !== searchId) return;
-    game.cache[game.actions.length] = result;
+    cache[game.actions.length] = result;
     show(result.move === S.STOP ? 'stop' : 'suggest', result);
   }
 
@@ -286,13 +302,26 @@
     renderLog();
   }
 
+  /** The third stat follows the strategy: ICE COLD's progress, or PERFECT's. */
   function renderStats(state) {
-    const n = state.nPlayed, ice = $('st-ice');
+    const n = state.nPlayed, bonus = $('st-bonus');
     $('st-points').textContent = fmt(state.score);
     $('st-words').textContent = String(n);
-    if (!state.cold) { ice.textContent = 'Lost'; ice.className = 'ice-off'; }
-    else if (n >= S.ICE_MIN) { ice.textContent = 'Active ×5'; ice.className = 'ice-on'; }
-    else { ice.textContent = `${n} of ${S.ICE_MIN} words`; ice.className = 'ice-on'; }
+    let text, cls = '';
+    if (mode === 'cold') {
+      $('st-bonus-label').textContent = 'Ice cold';
+      cls = 'ice-on';
+      if (!state.cold) { text = 'Lost'; cls = 'off'; }
+      else if (n >= S.ICE_MIN) text = 'Active ×5';
+      else text = `${n} of ${S.ICE_MIN} words`;
+    } else {
+      $('st-bonus-label').textContent = 'Perfect game';
+      if (n === 0) text = 'Pangram first';
+      else if (!state.pangramFirst) { text = 'Lost'; cls = 'off'; }
+      else text = state.lives.every(x => x === 0) ? 'Active ×2' : 'On track';
+    }
+    bonus.textContent = text;
+    bonus.className = cls;
     $('st-total').textContent = n > 0 ? fmt(S.stateTotal(state)) : '–';
   }
 
@@ -317,6 +346,8 @@
     const { spec, state, phase, suggestion: r } = game;
     const wordNo = state.nPlayed + 1;
     const undoBtn = game.actions.length ? '<button type="button" class="btn ghost" data-act="undo">Undo</button>' : '';
+    const keepsIce = mode === 'pangram' && iceOn(state) && phase !== 'over' && phase !== 'done'
+      ? '<p class="small">ICE COLD is already locked in, so Pangrams keeps it and avoids the spicy letter.</p>' : '';
     let html;
 
     if (phase === 'thinking') {
@@ -326,6 +357,7 @@
         <p class="searching">Searching…</p>
         <div class="progress" role="progressbar" aria-label="Search progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progress-bar"></span></div>
         <p class="small">Trying the ${plural(shortlist, 'best word')} against ${S.DEFAULTS.samples} random spice futures, each played out to the end of the game.</p>
+        ${keepsIce}
         ${undoBtn ? `<div class="turn-actions">${undoBtn}</div>` : ''}`;
     } else if (phase === 'suggest') {
       const w = r.move, word = spec.words[w];
@@ -346,6 +378,7 @@
           <span class="mchips">${multChips(bd)}</span>
         </div>
         <p class="projection">Projected final score <b>${fmt(r.value)}</b>, averaged over ${S.DEFAULTS.samples} spice futures.</p>
+        ${keepsIce}
         <hr class="divider">
         <div class="ask-block">${ask}</div>
         <div class="turn-actions">
@@ -370,6 +403,7 @@
         <div class="turn-top"><p class="label">${phase === 'stop' ? 'Solver says' : 'Game over'}</p></div>
         <p class="big-word" style="--len:${Math.max(title.length, 9)}">${title}</p>
         <p class="body">${body}</p>
+        ${keepsIce}
         ${tally(state)}
         <div class="turn-actions">${undoBtn}<button type="button" class="btn ghost" data-act="new">New board</button></div>`;
     }
@@ -413,7 +447,7 @@
 
   function onKey(e) {
     if (!game || game.phase !== 'suggest' || e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.target.closest && e.target.closest('input, textarea, select')) return;
+    if (e.target.closest && e.target.closest('input:not([type="radio"]), textarea, select')) return;
     const k = e.key.toLowerCase();
     if (!/^[a-z]$/.test(k)) return;
     const btn = $('turn').querySelector(`[data-spice="${k}"]`);
@@ -425,6 +459,7 @@
   function serialize() {
     return {
       setup: { ...setup },
+      mode,
       game: game && { letters: game.letters, spice: game.spec.outer[game.spice0], actions: game.actions },
     };
   }
@@ -445,6 +480,8 @@
       setup.example = !!data.setup.example;
     }
     $('letters').value = up(setup.letters);
+    if (data && MODES.includes(data.mode)) mode = data.mode;
+    document.querySelector(`input[name="mode"][value="${mode}"]`).checked = true;
     const g = data && data.game;
     if (g && typeof g.letters === 'string' && !letterProblem(g.letters) && g.letters.slice(1).includes(g.spice)) {
       startGame(g.letters, g.spice, Array.isArray(g.actions) ? g.actions : []);
@@ -511,6 +548,7 @@
       renderSetup();
       save();
     });
+    $('mode').addEventListener('change', e => setMode(e.target.value));
     $('turn').addEventListener('click', onTurnClick);
     document.addEventListener('keydown', onKey);
     restore(data && (data.setup || data.game) ? data : load());

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Smush Solver</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Enter today's Smush letters and get the best word to play each turn, picked by beam search.">
+<meta name="description" content="Enter today's Smush letters and get the best word to play each turn, picked by beam search. Go for ICE COLD or for pangrams.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -30,7 +30,7 @@
 <main id="top">
   <section class="intro wrap">
     <h1>What to play next in Smush, and when to stop.</h1>
-    <p class="lede">Enter today's nine letters and the spicy one. Each turn the solver plays out the rest of the game 96 ways with beam search, then tells you the word with the best average final score.</p>
+    <p class="lede">Enter today's nine letters and the spicy one, then pick a strategy: <b>Ice cold</b> dodges the spicy letter for the ×5, <b>Pangrams</b> goes for big words and the Perfect game ×2.</p>
   </section>
 
   <section id="solver" class="solver wrap" aria-label="Solver">
@@ -43,7 +43,7 @@
       <dl id="stats" class="stats" hidden>
         <div><dt>Word points</dt><dd id="st-points">0</dd></div>
         <div><dt>Words</dt><dd id="st-words">0</dd></div>
-        <div><dt>Ice cold</dt><dd id="st-ice">–</dd></div>
+        <div><dt id="st-bonus-label">Ice cold</dt><dd id="st-bonus">–</dd></div>
         <div><dt>If you stop now</dt><dd id="st-total">–</dd></div>
       </dl>
       <ul id="board-key" class="board-key" hidden>
@@ -53,6 +53,24 @@
     </div>
 
     <div class="turn-col">
+      <fieldset id="mode" class="mode">
+        <legend class="label">Strategy</legend>
+        <div class="seg">
+          <label class="seg-opt cold">
+            <input type="radio" name="mode" value="cold" checked>
+            <svg class="seg-ico" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5v19M9.4 4.4 12 7l2.6-2.6M9.4 19.6 12 17l2.6 2.6"/><path transform="rotate(60 12 12)" d="M12 2.5v19M9.4 4.4 12 7l2.6-2.6M9.4 19.6 12 17l2.6 2.6"/><path transform="rotate(-60 12 12)" d="M12 2.5v19M9.4 4.4 12 7l2.6-2.6M9.4 19.6 12 17l2.6 2.6"/></g></svg>
+            <span class="seg-name">Ice cold</span>
+            <span class="seg-sub">Dodge the spicy letter for ×5</span>
+          </label>
+          <label class="seg-opt pangram">
+            <input type="radio" name="mode" value="pangram">
+            <svg class="seg-ico" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><rect x="1.5" y="1.5" width="6" height="6" rx="1.4"/><rect x="9" y="1.5" width="6" height="6" rx="1.4"/><rect x="16.5" y="1.5" width="6" height="6" rx="1.4"/><rect x="1.5" y="9" width="6" height="6" rx="1.4"/><rect class="hub" x="9" y="9" width="6" height="6" rx="1.4"/><rect x="16.5" y="9" width="6" height="6" rx="1.4"/><rect x="1.5" y="16.5" width="6" height="6" rx="1.4"/><rect x="9" y="16.5" width="6" height="6" rx="1.4"/><rect x="16.5" y="16.5" width="6" height="6" rx="1.4"/></g></svg>
+            <span class="seg-name">Pangrams</span>
+            <span class="seg-sub">Big words, then Perfect ×2</span>
+          </label>
+        </div>
+      </fieldset>
+
       <form id="setup" class="card setup" novalidate>
         <div class="field">
           <div class="field-top">
@@ -100,7 +118,11 @@
           </li>
           <li>
             <h3>Pick the spicy letter</h3>
-            <p>Tap the letter that has the chili on it in the game right now, then press <b>Start solving</b>.</p>
+            <p>Tap the letter that has the chili on it in the game right now.</p>
+          </li>
+          <li>
+            <h3>Pick a strategy</h3>
+            <p><b>Ice cold</b> never uses the spicy letter, which earns ICE COLD's ×5, and it often stops after five or six words. On average it scores the most. <b>Pangrams</b> opens with a pangram, plays big words, and uses up every letter for the Perfect game ×2. Press <b>Start solving</b> when you're set. You can switch strategy at any point and the solver replans from there.</p>
           </li>
           <li>
             <h3>Play the word, then report the spice</h3>
@@ -112,7 +134,7 @@
           </li>
           <li>
             <h3>Stop when the solver says so</h3>
-            <p>When the card says <b>Stop here</b>, tap “I'm done” in Smush. The tally shows the bonuses the solver plays for. The game may add a few extras of its own, like streaks.</p>
+            <p>When the card says <b>Stop here</b>, tap “I'm done” in Smush. This happens mostly with Ice cold. The tally shows the bonuses the solver plays for. The game may add a few extras of its own, like streaks.</p>
           </li>
         </ol>
         <aside class="ref card" aria-labelledby="ref-title">
@@ -135,10 +157,10 @@
               <tr><th>Heavy lifter, 6 words or fewer</th><td>+25</td></tr>
               <tr><th>Word hoard, 13 words or more</th><td>+25</td></tr>
               <tr><th>Perfect game, pangram first + clean plate + no hints</th><td>×2</td></tr>
-              <tr class="ice"><th>ICE COLD, 5+ words that never used the spicy letter</th><td>×5</td></tr>
+              <tr class="ice"><th>ICE COLD, never used the spicy letter</th><td>×5</td></tr>
             </tbody>
           </table>
-          <p class="ref-foot">ICE COLD is usually the biggest prize, which is why the solver steers around the spicy letter and often stops early.</p>
+          <p class="ref-foot">A pangram uses every letter, spicy one included, so ICE COLD and Perfect game never happen together. Each strategy goes for one of them.</p>
         </aside>
       </div>
       <p class="tip"><b>Tip:</b> Tapped the wrong spicy letter? <b>Undo</b> steps back one word. Your game is saved in this browser, so you can switch to Smush and come back.</p>
@@ -161,6 +183,8 @@
             <li><b>Decide.</b> Average each word's best result over the 8 paths. Suggest the top word, or say Stop if ending the game now scores more.</li>
           </ol>
           <p>That's 96 beam searches per turn, run in your browser. When you report the new spicy letter, the solver starts over from the real position.</p>
+          <h3 class="about-sub">Two strategies, one search</h3>
+          <p>Both strategies run the same search. They differ only in how a finished line is scored. <b>Ice cold</b> counts every bonus, and because ICE COLD multiplies the whole total by 5, the search learns to steer around the spicy letter. <b>Pangrams</b> leaves ICE COLD out. The spicy letter's +1s are then worth taking, and the search finds the rest by itself: a pangram first for its +4, long words, and a clean plate for the Perfect game ×2.</p>
         </div>
         <figure class="beam-fig">
           <div class="fig-scroll"><svg id="beam-svg" viewBox="0 0 640 250" role="img" aria-labelledby="beam-cap"></svg></div>
@@ -168,17 +192,15 @@
         </figure>
       </div>
       <div class="results">
-        <h3>Why the bonuses matter</h3>
-        <p>Ranking lines by the final score with bonuses, not by word points alone, is what makes this <b>beam+</b> instead of a plain beam search. Average final score over the same 100 random boards:</p>
         <table class="results-table">
           <thead><tr><th scope="col">Strategy</th><th scope="col">Average score</th></tr></thead>
           <tbody>
             <tr><th scope="row">Always play the highest-scoring word</th><td>489</td></tr>
-            <tr><th scope="row">Beam search for word points only</th><td>718</td></tr>
-            <tr class="hl"><th scope="row">Beam+ with bonuses and early stopping (this site)</th><td>1,018</td></tr>
+            <tr class="hl pangram"><th scope="row">Beam+, Pangrams strategy (this site)</th><td>871</td></tr>
+            <tr class="hl cold"><th scope="row">Beam+, Ice cold strategy (this site)</th><td>1,018</td></tr>
           </tbody>
         </table>
-        <p class="fine">The browser version is a direct port of the original Python solver and returns the same values when given the same random draws.</p>
+        <p class="results-note">Because a perfect game is not guaranteed, pangrams averages about 150 less, but it plays much bigger words: about 390 word points a game, against about 150 for Ice cold, but we could guarantee a ×5 multiplier with ice cold.</p>
       </div>
     </div>
   </section>
@@ -186,8 +208,8 @@
 
 <footer class="foot">
   <div class="wrap foot-in">
-    <p>Smush Solver is an unofficial fan tool for <a href="https://hankgreen.com/smush" target="_blank" rel="noopener">Smush</a> by Hank Green.</p>
-    <p>Words come from a 162,231-word Scrabble dictionary.</p>
+    <p>Smush Solver is an unofficial fan tool for <a href="https://hankgreen.com/smush" target="_blank" rel="noopener">Smush</a> by John Green and Hank Green.</p>
+    <p>Words come from a Scrabble dictionary.</p>
   </div>
 </footer>
 
